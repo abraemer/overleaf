@@ -701,17 +701,15 @@ const AuthenticationController = {
     )(req, res, next)
   },
 
-  verifyOpenIDConnect(issuer, profile, callback) {
-    const oidcIdentifier =
-      AuthenticationController.extractOidcIdFromProfile(profile)
-    if (!oidcIdentifier) {
-      return callback(new Error('OIDC profile did not contain an identifier'))
-    }
-    const email = EmailHelper.parseEmail(profile.email || profile._json?.email)
-    void User.findOne({ oidcIdentifier }, function (err, user) {
-      if (err) {
-        return callback(err)
+  async verifyOpenIDConnect(issuer, profile, callback) {
+    try {
+      const oidcIdentifier =
+        AuthenticationController.extractOidcIdFromProfile(profile)
+      if (!oidcIdentifier) {
+        return callback(new Error('OIDC profile did not contain an identifier'))
       }
+      const email = EmailHelper.parseEmail(profile.email || profile._json?.email)
+      let user = await User.findOne({ oidcIdentifier })
       if (user) {
         // Update name/email if changed in the IdP
         const $set = {}
@@ -744,20 +742,15 @@ const AuthenticationController = {
           if (Object.keys($push).length) {
             update.$push = $push
           }
-          void User.updateOne({ _id: user._id }, update, function (err) {
-            if (err) {
-              return callback(err)
-            }
-            void User.findById(user._id, callback)
-          })
-        } else {
-          callback(null, user)
+          await User.updateOne({ _id: user._id }, update)
+          user = await User.findById(user._id)
         }
+        return callback(null, user)
       } else {
         // Create a new user
         const firstName =
           profile.displayName || profile.givenName || (email ? email.split('@')[0] : 'User')
-        UserCreator.createNewUser(
+        user = await UserCreator.promises.createNewUser(
           {
             email: email || '',
             first_name: firstName,
@@ -766,16 +759,13 @@ const AuthenticationController = {
           },
           {
             confirmedAt: new Date(),
-          },
-          function (err, user) {
-            if (err) {
-              return callback(err)
-            }
-            callback(null, user)
           }
         )
+        return callback(null, user)
       }
-    })
+    } catch (err) {
+      callback(err)
+    }
   },
 }
 
