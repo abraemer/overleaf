@@ -234,6 +234,7 @@ if (Settings.oidc) {
         clientSecret: Settings.oidc.clientSecret,
         callbackURL: Settings.oidc.callbackUrl,
         scope: Settings.oidc.scope || 'openid profile email',
+        skipUserProfile: false,
       },
       AuthenticationController.verifyOpenIDConnect
     )
