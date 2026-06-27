@@ -689,7 +689,9 @@ const AuthenticationController = {
       if (!oidcIdentifier) {
         return callback(new Error('OIDC profile did not contain an identifier'))
       }
-      const email = EmailHelper.parseEmail(profile.email || profile._json?.email)
+      const email = EmailHelper.parseEmail(
+        profile.emails?.[0]?.value || profile.email || profile._json?.email
+      )
       let user = await User.findOne({ oidcIdentifier })
       if (user) {
         // Update name/email if changed in the IdP
