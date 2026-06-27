@@ -23,6 +23,11 @@ ENV COREPACK_ENABLE_NETWORK=0
 
 # Install yarn dependencies
 # -------------------------
+# Pre-install @codemirror/buildhelper globally so that the prepare scripts of
+# the @replit/codemirror-* git dependencies can find cm-buildhelper.
+# (yarn 4 does not install devDependencies of git deps, so their prepare
+# scripts fail with exit 127. This provides the tool they need.)
+RUN npm install -g @codemirror/buildhelper
 RUN --mount=type=cache,target=/root/.cache \
     --mount=type=cache,target=/root/.yarn/berry/cache,id=server-ce-yarn-cache \
     --mount=type=cache,target=/usr/local/share/.cache/yarn,id=server-ce-yarn-fallback-cache \
