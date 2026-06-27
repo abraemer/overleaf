@@ -18,6 +18,7 @@ import cookieParser from 'cookie-parser'
 import bearerTokenMiddleware from 'express-bearer-token'
 import passport from 'passport'
 import { Strategy as LocalStrategy } from 'passport-local'
+import { Strategy as OpenIDConnectStrategy } from '@govtechsg/passport-openidconnect'
 import ReferalConnect from '../Features/Referal/ReferalConnect.mjs'
 import RedirectManager from './RedirectManager.mjs'
 import translations from './Translations.mjs'
@@ -210,6 +211,7 @@ webRouter.use(passport.initialize())
 webRouter.use(passport.session())
 
 passport.use(
+  'local',
   new LocalStrategy(
     {
       passReqToCallback: true,
@@ -219,6 +221,24 @@ passport.use(
     AuthenticationController.doPassportLogin
   )
 )
+if (Settings.oidc) {
+  passport.use(
+    'oidc',
+    new OpenIDConnectStrategy(
+      {
+        issuer: Settings.oidc.issuer,
+        authorizationURL: Settings.oidc.authorizationUrl,
+        tokenURL: Settings.oidc.tokenUrl,
+        userInfoURL: Settings.oidc.userInfoUrl,
+        clientID: Settings.oidc.clientId,
+        clientSecret: Settings.oidc.clientSecret,
+        callbackURL: Settings.oidc.callbackUrl,
+        scope: Settings.oidc.scope || 'openid profile email',
+      },
+      AuthenticationController.verifyOpenIDConnect
+    )
+  )
+}
 passport.serializeUser(AuthenticationController.serializeUser)
 passport.deserializeUser(AuthenticationController.deserializeUser)
 
