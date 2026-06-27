@@ -26,6 +26,9 @@ import { expressify, promisify } from '@overleaf/promise-utils'
 import { handleAuthenticateErrors } from './AuthenticationErrors.mjs'
 import EmailHelper from '../Helpers/EmailHelper.mjs'
 import SplitTestHandler from '../SplitTests/SplitTestHandler.mjs'
+import { User } from '../../models/User.mjs'
+import UserCreator from '../User/UserCreator.mjs'
+import crypto from 'node:crypto'
 
 const { hasAdminAccess } = AdminAuthorizationHelper
 
@@ -130,44 +133,46 @@ const AuthenticationController = {
     passport.authenticate(
       'local',
       { keepSessionInfo: true },
-      async function (err, user, info) {
-        if (err) {
+      AuthenticationController.createPassportCallback('Password login', req, res, next)
+    )(req, res, next)
+  },
+
+  createPassportCallback(method, req, res, next) {
+    return async function (err, user, info) {
+      if (err) {
+        return next(err)
+      }
+      if (user) {
+        // `user` is either a user object or false
+        AuthenticationController.setAuditInfo(req, { method })
+
+        try {
+          // We could investigate whether this can be done together with 'preFinishLogin' instead of being its own hook
+          await Modules.promises.hooks.fire(
+            'saasLogin',
+            { email: user.email },
+            req
+          )
+          await AuthenticationController.promises.finishLogin(user, req, res)
+        } catch (err) {
           return next(err)
         }
-        if (user) {
-          // `user` is either a user object or false
-          AuthenticationController.setAuditInfo(req, {
-            method: 'Password login',
-          })
-
-          try {
-            // We could investigate whether this can be done together with 'preFinishLogin' instead of being its own hook
-            await Modules.promises.hooks.fire(
-              'saasLogin',
-              { email: user.email },
-              req
-            )
-            await AuthenticationController.promises.finishLogin(user, req, res)
-          } catch (err) {
-            return next(err)
-          }
+      } else {
+        if (info.redir != null) {
+          return res.json({ redir: info.redir })
         } else {
-          if (info.redir != null) {
-            return res.json({ redir: info.redir })
-          } else {
-            res.status(info.status || 200)
-            delete info.status
-            const body = { message: info }
-            const { errorReason } = info
-            if (errorReason) {
-              body.errorReason = errorReason
-              delete info.errorReason
-            }
-            return res.json(body)
+          res.status(info.status || 200)
+          delete info.status
+          const body = { message: info }
+          const { errorReason } = info
+          if (errorReason) {
+            body.errorReason = errorReason
+            delete info.errorReason
           }
+          return res.json(body)
         }
       }
-    )(req, res, next)
+    }
   },
 
   async _finishLoginAsync(user, req, res) {
@@ -631,6 +636,127 @@ const AuthenticationController = {
     if (req.session != null) {
       delete req.session.postLoginRedirect
     }
+  },
+
+  extractOidcIdFromProfile(profile) {
+    const matching = Settings.oidc?.matching || 'id'
+    if (matching === 'username') {
+      return profile.username || profile.preferred_username
+    }
+    return profile.id
+  },
+
+  // Returns true if OIDC login is enabled, otherwise redirects to /login
+  // and returns false so the caller can bail out.
+  ensureOidcLoginEnabled(res) {
+    if (!Settings.oidc) {
+      res.redirect('/login')
+      return false
+    }
+    return true
+  },
+
+  oidcLogin(req, res, next) {
+    if (!AuthenticationController.ensureOidcLoginEnabled(res)) {
+      return
+    }
+    passport.authenticate('oidc')(req, res, next)
+  },
+
+  oidcLoginCallback(req, res, next) {
+    if (!AuthenticationController.ensureOidcLoginEnabled(res)) {
+      return
+    }
+    passport.authenticate(
+      'oidc',
+      {
+        failureRedirect: '/login',
+        failureMessage: true,
+      },
+      AuthenticationController.createPassportCallback(
+        'OIDC login',
+        req,
+        res,
+        next
+      )
+    )(req, res, next)
+  },
+
+  verifyOpenIDConnect(issuer, profile, callback) {
+    const oidcIdentifier =
+      AuthenticationController.extractOidcIdFromProfile(profile)
+    if (!oidcIdentifier) {
+      return callback(new Error('OIDC profile did not contain an identifier'))
+    }
+    const email = EmailHelper.parseEmail(profile.email || profile._json?.email)
+    void User.findOne({ oidcIdentifier }, function (err, user) {
+      if (err) {
+        return callback(err)
+      }
+      if (user) {
+        // Update name/email if changed in the IdP
+        const $set = {}
+        const $push = {}
+        if (profile.displayName && profile.displayName !== user.first_name) {
+          $set.first_name = profile.displayName
+        }
+        if (
+          email &&
+          email !== user.email &&
+          !user.emails.some(e => e.email === email)
+        ) {
+          $set.email = email
+          $push.emails = {
+            email,
+            createdAt: new Date(),
+            reversedHostname: email
+              .split('@')[1]
+              .split('')
+              .reverse()
+              .join(''),
+            confirmedAt: new Date(),
+          }
+        }
+        if (Object.keys($set).length || Object.keys($push).length) {
+          const update = {}
+          if (Object.keys($set).length) {
+            update.$set = $set
+          }
+          if (Object.keys($push).length) {
+            update.$push = $push
+          }
+          void User.updateOne({ _id: user._id }, update, function (err) {
+            if (err) {
+              return callback(err)
+            }
+            void User.findById(user._id, callback)
+          })
+        } else {
+          callback(null, user)
+        }
+      } else {
+        // Create a new user
+        const firstName =
+          profile.displayName || profile.givenName || (email ? email.split('@')[0] : 'User')
+        UserCreator.createNewUser(
+          {
+            email: email || '',
+            first_name: firstName,
+            oidcIdentifier,
+            analyticsId: crypto.randomUUID(),
+          },
+          {
+            confirmedAt: new Date(),
+          },
+          function (err, user) {
+            if (err) {
+              return callback(err)
+            }
+            callback(null, user)
+          }
+        )
+      }
+    })
   },
 }
 

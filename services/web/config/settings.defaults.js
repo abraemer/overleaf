@@ -840,6 +840,9 @@ module.exports = {
     showSubscriptionLink: false,
 
     header_extras: [],
+
+    login_info_text: null,
+    oidc_login_button_text: 'Log in with SSO',
   },
   // Example:
   //   header_extras: [{text: "Some Page", url: "http://example.com/some/page", class: "subdued"}]

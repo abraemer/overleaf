@@ -247,6 +247,15 @@ async function initialize(webRouter, privateApiRouter, publicApiRouter) {
     AuthenticationController.passportLogin
   )
 
+  // OIDC (OpenID Connect) login
+  webRouter.get('/login/oidc', AuthenticationController.oidcLogin)
+  AuthenticationController.addEndpointToLoginWhitelist('/login/oidc')
+  webRouter.get(
+    '/login/oidc/callback',
+    AuthenticationController.oidcLoginCallback
+  )
+  AuthenticationController.addEndpointToLoginWhitelist('/login/oidc/callback')
+
   webRouter.get(
     '/compromised-password',
     AuthenticationController.requireLogin(),

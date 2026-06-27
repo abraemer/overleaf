@@ -6,6 +6,12 @@ function requiresPrimaryEmailCheck({
   lastPrimaryEmailCheck,
   signUpDate,
 }) {
+  // When OIDC is in use, emails come from the identity provider and are
+  // already trusted, so we skip the primary email confirmation check.
+  if (Settings.oidc) {
+    return false
+  }
+
   const hasExpired = date => {
     if (!date) {
       return true

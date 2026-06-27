@@ -190,7 +190,14 @@ describe('AuthenticationController', function () {
     )
 
     vi.doMock('../../../../app/src/models/User', () => ({
+      User: ctx.UserModel,
       default: { User: ctx.UserModel },
+    }))
+
+    vi.doMock('../../../../app/src/Features/User/UserCreator', () => ({
+      default: (ctx.UserCreator = {
+        createNewUser: sinon.stub(),
+      }),
     }))
 
     ctx.Oauth2Server = {

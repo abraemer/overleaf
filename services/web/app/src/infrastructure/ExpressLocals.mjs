@@ -364,6 +364,18 @@ export default async function (webRouter, privateApiRouter, publicApiRouter) {
   })
 
   webRouter.use(function (req, res, next) {
+    res.locals.local_login_enabled =
+      Settings.localLoginEnabled !== false
+    res.locals.oidc_login_enabled = Boolean(Settings.oidc)
+    res.locals.login_info_text = Settings.nav?.login_info_text
+    res.locals.oidc_login_button_text =
+      Settings.nav?.oidc_login_button_text || 'Log in with SSO'
+    res.locals.oidc_login_in_navbar =
+      Settings.oidcLoginInNavbar === true
+    next()
+  })
+
+  webRouter.use(function (req, res, next) {
     res.locals.ExposedSettings = {
       isOverleaf: Settings.overleaf != null,
       appName: Settings.appName,

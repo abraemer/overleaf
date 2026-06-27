@@ -357,6 +357,41 @@ if (process.env.OVERLEAF_LOGIN_SUPPORT_TITLE != null) {
   settings.nav.login_support_title = process.env.OVERLEAF_LOGIN_SUPPORT_TITLE
 }
 
+// OIDC (OpenID Connect)
+// ---------------------
+//
+// Overleaf Community Edition can delegate authentication to an external OIDC
+// provider (e.g. Keycloak, Authentik, Auth0). When OVERLEAF_OIDC_ISSUER is set,
+// the OIDC login flow is enabled and a "Log in with SSO" button is shown on
+// the login page.
+if (process.env.OVERLEAF_OIDC_ISSUER != null) {
+  settings.oidc = {
+    issuer: process.env.OVERLEAF_OIDC_ISSUER,
+    authorizationUrl: process.env.OVERLEAF_OIDC_AUTHORIZATION_URL,
+    tokenUrl: process.env.OVERLEAF_OIDC_TOKEN_URL,
+    userInfoUrl: process.env.OVERLEAF_OIDC_USERINFO_URL,
+    clientId: process.env.OVERLEAF_OIDC_CLIENT_ID,
+    clientSecret: process.env.OVERLEAF_OIDC_CLIENT_SECRET,
+    callbackUrl:
+      process.env.OVERLEAF_OIDC_CALLBACK_URL ||
+      '/login/oidc/callback',
+    scope: process.env.OVERLEAF_OIDC_SCOPE || 'openid profile email',
+    matching: process.env.OVERLEAF_OIDC_MATCHING || 'id',
+  }
+}
+
+// Local (email/password) login can be disabled when an external auth system
+// (e.g. OIDC) is the primary way to log in. Defaults to enabled.
+settings.localLoginEnabled = process.env.OVERLEAF_ENABLE_LOCAL_LOGIN !== 'false'
+
+if (process.env.OVERLEAF_LOGIN_INFO_TEXT != null) {
+  settings.nav.login_info_text = process.env.OVERLEAF_LOGIN_INFO_TEXT
+}
+if (process.env.OVERLEAF_LOGIN_OIDC_BUTTON_TEXT != null) {
+  settings.nav.oidc_login_button_text = process.env.OVERLEAF_LOGIN_OIDC_BUTTON_TEXT
+}
+settings.oidcLoginInNavbar = process.env.OVERLEAF_OIDC_LOGIN_IN_NAVBAR === 'true'
+
 // Sending Email
 // -------------
 //
