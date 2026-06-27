@@ -10,5 +10,14 @@ Overleaf Community Edition ships only local email/password authentication — SS
 
 - **`main`** mirrors upstream `main` and is only updated by `git fetch upstream && git merge upstream/main`.
 - **`add-oidc`** is a single clean commit on top of `main` that adds the OIDC login feature. It does **not** carry the unrelated git history from ErikMichelson's fork — the patch was re-applied manually against current upstream so that it rebases cleanly.
-- **Upgrades** are a standard rebase: `git fetch upstream && git checkout add-oidc && git rebase upstream/main`. Any conflicts will be genuine OIDC-related ones (localized to the Authentication module, Server, router, two pug views, the User model, and `package.json`), not spurious add/add noise from divergent histories.
+- **Upgrades** are a standard rebase: `git fetch upstream && git checkout add-oidc && git rebase upstream/main`. Any conflicts will be genuine OIDC-related ones, localized to: the Authentication controller, the User model, `UserPrimaryEmailCheckHandler`, `ExpressLocals`, `Features`, `Server` (passport setup), `router.mjs`, the two pug views (`login.pug`, `navbar-marketing.pug`), `server-ce/config/settings.js`, `services/web/config/settings.defaults.js`, `services/web/package.json`, and the `.gitignore` (plus the lockfile churn from upstream drift).
 - The OIDC feature is configured entirely via `OVERLEAF_OIDC_*` environment variables read in `server-ce/config/settings.js`; no other runtime configuration is required.
+
+## First-time setup
+
+If cloning fresh, configure the upstream remote before running the upgrade flow:
+
+```sh
+git remote add upstream https://github.com/overleaf/overleaf.git
+git fetch upstream
+```
