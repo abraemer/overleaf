@@ -18,9 +18,10 @@ block content
 							a.btn.btn-success.btn-block(href='/login/oidc')
 								| #{oidc_login_button_text}
 						if local_login_enabled
-							hr
-							p.text-center.text-muted
-								| #{translate("or")}
+							.position-relative.text-center.my-3
+								hr
+								span.position-absolute.top-50.start-50.translate-middle.bg-white.px-2.text-muted
+									| #{translate("or")}
 					if local_login_enabled
 						form(name='loginForm' data-ol-async-form action='/login' method='POST')
 							input(name='_csrf' type='hidden' value=csrfToken)
