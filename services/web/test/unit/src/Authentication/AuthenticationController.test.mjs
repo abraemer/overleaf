@@ -1987,4 +1987,29 @@ describe('AuthenticationController', function () {
       })
     })
   })
+
+  describe('oidcLoginCallback', function () {
+    beforeEach(function (ctx) {
+      ctx.Settings.oidc = { issuer: 'https://sso.example.com' }
+    })
+
+    it('should redirect to /login on authentication failure and not return JSON', function (ctx) {
+      ctx.passport.authenticate.callsFake(
+        (strategy, options, callback) => (req, res, next) =>
+          callback(null, false, { message: 'test failure' })
+      )
+      ctx.AuthenticationController.oidcLoginCallback(ctx.req, ctx.res, ctx.next)
+      expect(ctx.res.redirect).toHaveBeenCalledWith('/login')
+      expect(ctx.res.json).not.toHaveBeenCalled()
+    })
+
+    it('should stash the failure message in the session', function (ctx) {
+      ctx.passport.authenticate.callsFake(
+        (strategy, options, callback) => (req, res, next) =>
+          callback(null, false, { message: 'test failure' })
+      )
+      ctx.AuthenticationController.oidcLoginCallback(ctx.req, ctx.res, ctx.next)
+      expect(ctx.req.session.messages).to.deep.equal(['test failure'])
+    })
+  })
 })

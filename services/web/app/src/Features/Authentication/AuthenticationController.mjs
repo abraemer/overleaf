@@ -667,19 +667,24 @@ const AuthenticationController = {
     if (!AuthenticationController.ensureOidcLoginEnabled(res)) {
       return
     }
-    passport.authenticate(
-      'oidc',
-      {
-        failureRedirect: '/login',
-        failureMessage: true,
-      },
-      AuthenticationController.createPassportCallback(
-        'OIDC login',
-        req,
-        res,
-        next
+    passport.authenticate('oidc', {}, function (err, user, info) {
+      if (err) {
+        return next(err)
+      }
+      if (!user) {
+        // Failure: stash the reason in the session (replaces passport's dead
+        // failureMessage option) then redirect to /login.
+        if (info && info.message) {
+          req.session.messages = [...(req.session.messages || []), info.message]
+        }
+        return res.redirect('/login')
+      }
+      // Success
+      AuthenticationController.setAuditInfo(req, { method: 'OIDC login' })
+      AuthenticationController.promises.finishLogin(user, req, res).catch(
+        err => next(err)
       )
-    )(req, res, next)
+    })(req, res, next)
   },
 
   async verifyOpenIDConnect(issuer, profile, callback) {
