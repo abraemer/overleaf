@@ -2011,6 +2011,36 @@ describe('AuthenticationController', function () {
       ctx.AuthenticationController.oidcLoginCallback(ctx.req, ctx.res, ctx.next)
       expect(ctx.req.session.messages).to.deep.equal(['test failure'])
     })
+
+    it('should set the audit info and call finishLogin on success', function (ctx) {
+      ctx.AuthenticationController.promises.finishLogin = sinon
+        .stub()
+        .resolves()
+      ctx.passport.authenticate.callsFake(
+        (strategy, options, callback) => (req, res, next) =>
+          callback(null, ctx.user)
+      )
+      ctx.AuthenticationController.oidcLoginCallback(ctx.req, ctx.res, ctx.next)
+      expect(ctx.req.__authAuditInfo).to.deep.equal({ method: 'OIDC login' })
+      expect(ctx.AuthenticationController.promises.finishLogin).to.have.been.calledWith(
+        ctx.user,
+        ctx.req,
+        ctx.res
+      )
+      expect(ctx.next).to.not.have.been.called
+      expect(ctx.res.redirect).not.toHaveBeenCalled()
+    })
+
+    it('should pass the error to next when authentication errors', function (ctx) {
+      const err = new Error('boom')
+      ctx.passport.authenticate.callsFake(
+        (strategy, options, callback) => (req, res, next) =>
+          callback(err)
+      )
+      ctx.AuthenticationController.oidcLoginCallback(ctx.req, ctx.res, ctx.next)
+      expect(ctx.next).to.have.been.calledWith(err)
+      expect(ctx.res.redirect).not.toHaveBeenCalled()
+    })
   })
 
   describe('verifyOpenIDConnect', function () {
@@ -2085,6 +2115,52 @@ describe('AuthenticationController', function () {
       const attrs = ctx.UserCreator.promises.createNewUser.firstCall.args[0]
       expect(attrs.email).to.equal('new@example.com')
       expect(ctx.callback).to.have.been.calledWith(null)
+    })
+  })
+
+  describe('extractOidcIdFromProfile', function () {
+    it('should return the profile id by default', function (ctx) {
+      delete ctx.Settings.oidc
+      const result = ctx.AuthenticationController.extractOidcIdFromProfile({
+        id: 'oidc-123',
+      })
+      expect(result).to.equal('oidc-123')
+    })
+
+    it('should return the username when matching is set to username', function (ctx) {
+      ctx.Settings.oidc = { matching: 'username' }
+      const result = ctx.AuthenticationController.extractOidcIdFromProfile({
+        username: 'jdoe',
+      })
+      expect(result).to.equal('jdoe')
+    })
+
+    it('should fall back to preferred_username when matching is username and username is missing', function (ctx) {
+      ctx.Settings.oidc = { matching: 'username' }
+      const result = ctx.AuthenticationController.extractOidcIdFromProfile({
+        preferred_username: 'jdoe2',
+      })
+      expect(result).to.equal('jdoe2')
+    })
+  })
+
+  describe('ensureOidcLoginEnabled', function () {
+    it('should return true and not redirect when OIDC is enabled', function (ctx) {
+      ctx.Settings.oidc = { issuer: 'https://sso.example.com' }
+      const result = ctx.AuthenticationController.ensureOidcLoginEnabled(
+        ctx.res
+      )
+      expect(result).to.equal(true)
+      expect(ctx.res.redirect).not.toHaveBeenCalled()
+    })
+
+    it('should redirect to /login and return false when OIDC is disabled', function (ctx) {
+      delete ctx.Settings.oidc
+      const result = ctx.AuthenticationController.ensureOidcLoginEnabled(
+        ctx.res
+      )
+      expect(result).to.equal(false)
+      expect(ctx.res.redirect).toHaveBeenCalledWith('/login')
     })
   })
 })
