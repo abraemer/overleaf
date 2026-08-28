@@ -2012,4 +2012,79 @@ describe('AuthenticationController', function () {
       expect(ctx.req.session.messages).to.deep.equal(['test failure'])
     })
   })
+
+  describe('verifyOpenIDConnect', function () {
+    beforeEach(function (ctx) {
+      ctx.Settings.oidc = { issuer: 'https://sso.example.com' }
+      ctx.UserModel.updateOne = sinon.stub().resolves({})
+      ctx.UserModel.findById = sinon.stub().resolves(null)
+      ctx.UserCreator.promises = {
+        createNewUser: sinon.stub().resolves({ _id: new ObjectId() }),
+      }
+      ctx.oidcUser = {
+        _id: new ObjectId(),
+        email: 'old@example.com',
+        first_name: 'bob',
+        emails: [],
+      }
+    })
+
+    it('should callback with an error and not create a user when the profile has no email', async function (ctx) {
+      ctx.UserModel.findOne.resolves(null)
+      await ctx.AuthenticationController.verifyOpenIDConnect(
+        'https://sso.example.com',
+        { id: 'oidc-1' },
+        ctx.callback
+      )
+      expect(ctx.callback).to.have.been.calledOnce
+      const err = ctx.callback.firstCall.args[0]
+      expect(err).to.be.an.instanceof(Error)
+      expect(err.message).to.equal(
+        'OIDC profile did not contain a required email claim'
+      )
+      expect(ctx.UserModel.findOne).to.not.have.been.called
+      expect(ctx.UserCreator.promises.createNewUser).to.not.have.been.called
+    })
+
+    it('should promote the IdP email to primary without duplicating it in emails when it is already a secondary', async function (ctx) {
+      ctx.oidcUser.emails = [{ email: 'new@example.com', confirmedAt: new Date() }]
+      ctx.UserModel.findOne.resolves(ctx.oidcUser)
+      await ctx.AuthenticationController.verifyOpenIDConnect(
+        'https://sso.example.com',
+        { id: 'oidc-1', emails: [{ value: 'new@example.com' }] },
+        ctx.callback
+      )
+      expect(ctx.UserModel.updateOne).to.have.been.calledOnce
+      const update = ctx.UserModel.updateOne.firstCall.args[1]
+      expect(update.$set).to.deep.equal({ email: 'new@example.com' })
+      expect(update.$push).to.be.undefined
+      expect(ctx.callback).to.have.been.calledWith(null)
+    })
+
+    it('should set the primary email and push a new secondary when the IdP email is unknown', async function (ctx) {
+      ctx.UserModel.findOne.resolves(ctx.oidcUser)
+      await ctx.AuthenticationController.verifyOpenIDConnect(
+        'https://sso.example.com',
+        { id: 'oidc-1', emails: [{ value: 'new@example.com' }] },
+        ctx.callback
+      )
+      const update = ctx.UserModel.updateOne.firstCall.args[1]
+      expect(update.$set).to.deep.equal({ email: 'new@example.com' })
+      expect(update.$push.emails.email).to.equal('new@example.com')
+      expect(update.$push.emails.reversedHostname).to.equal('moc.elpmaxe')
+    })
+
+    it('should pass the IdP email to createNewUser for a new user', async function (ctx) {
+      ctx.UserModel.findOne.resolves(null)
+      await ctx.AuthenticationController.verifyOpenIDConnect(
+        'https://sso.example.com',
+        { id: 'oidc-1', emails: [{ value: 'new@example.com' }] },
+        ctx.callback
+      )
+      expect(ctx.UserCreator.promises.createNewUser).to.have.been.calledOnce
+      const attrs = ctx.UserCreator.promises.createNewUser.firstCall.args[0]
+      expect(attrs.email).to.equal('new@example.com')
+      expect(ctx.callback).to.have.been.calledWith(null)
+    })
+  })
 })

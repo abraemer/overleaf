@@ -1,0 +1,38 @@
+{
+  "task": "task-2-fix-oidc-issues",
+  "date": "2026-08-28",
+  "file": "services/web/app/src/Features/Authentication/AuthenticationController.mjs",
+  "method": "verifyOpenIDConnect",
+  "changes": [
+    {
+      "change": "no-email guard",
+      "detail": "After EmailHelper.parseEmail, added: if (!email) return callback(new Error('OIDC profile did not contain a required email claim')). Guard runs before User.findOne and before the createNewUser path. Removed the `email || ''` fallback in the createNewUser call (now `email: email`) since the guard guarantees non-null. This prevents the TypeError in UserCreator.mjs (`user.email.split('@')[1]` on empty string)."
+    },
+    {
+      "change": "primary-promote split",
+      "detail": "Split the single compound condition into two independent ifs: $set.email applied whenever email && email !== user.email (IdP email always becomes primary); $push.emails applied only when additionally !user.emails.some(e => e.email === email) (no duplicate secondary)."
+    }
+  ],
+  "notTouched": [
+    "oidcLoginCallback (Task 1)",
+    "createPassportCallback / passportLogin",
+    "UserPrimaryEmailCheckHandler.mjs",
+    "firstName logic (email ? branch left as-is)",
+    "UserCreator.mjs"
+  ],
+  "tests": {
+    "file": "services/web/test/unit/src/Authentication/AuthenticationController.test.mjs",
+    "added": [
+      "should callback with an error and not create a user when the profile has no email",
+      "should promote the IdP email to primary without duplicating it in emails when it is already a secondary",
+      "should set the primary email and push a new secondary when the IdP email is unknown",
+      "should pass the IdP email to createNewUser for a new user"
+    ],
+    "result": "4/4 new tests pass. Full file: 122 passed, 11 failed — the 11 failures are pre-existing requireOauth timeouts, confirmed identical on clean HEAD via git stash."
+  },
+  "verification": [
+    "npx vitest run test/unit/src/Authentication/AuthenticationController.test.mjs -t verifyOpenIDConnect -> 4 passed",
+    "git stash + rerun requireOauth on HEAD -> same 11 failures (pre-existing)",
+    "lsp_diagnostics on AuthenticationController.mjs -> clean"
+  ]
+}

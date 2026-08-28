@@ -697,6 +697,11 @@ const AuthenticationController = {
       const email = EmailHelper.parseEmail(
         profile.emails?.[0]?.value || profile.email || profile._json?.email
       )
+      if (!email) {
+        return callback(
+          new Error('OIDC profile did not contain a required email claim')
+        )
+      }
       let user = await User.findOne({ oidcIdentifier })
       if (user) {
         // Update name/email if changed in the IdP
@@ -705,12 +710,14 @@ const AuthenticationController = {
         if (profile.displayName && profile.displayName !== user.first_name) {
           $set.first_name = profile.displayName
         }
+        if (email && email !== user.email) {
+          $set.email = email
+        }
         if (
           email &&
           email !== user.email &&
           !user.emails.some(e => e.email === email)
         ) {
-          $set.email = email
           $push.emails = {
             email,
             createdAt: new Date(),
@@ -740,7 +747,7 @@ const AuthenticationController = {
           profile.displayName || profile.givenName || (email ? email.split('@')[0] : 'User')
         user = await UserCreator.promises.createNewUser(
           {
-            email: email || '',
+            email: email,
             first_name: firstName,
             oidcIdentifier,
             analyticsId: crypto.randomUUID(),
